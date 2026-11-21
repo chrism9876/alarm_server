@@ -1,3 +1,11 @@
+# Docker
+
+when renning in docker mount the conf dir to persist alarms
+
+Expose port 8080
+
+https://hub.docker.com/r/cm98765432/alarm_server
+
 # Alarm server
 
 Manage the clock's alarms from a web page instead of on the clock. The clock downloads the alarms from this server.

@@ -34,7 +34,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-DATA_FILE = Path(os.environ.get("ALARM_DATA_FILE", BASE_DIR / "alarms.json"))
+DATA_FILE = Path(os.environ.get("ALARM_DATA_FILE", BASE_DIR / "conf/alarms.json"))
 API_TOKEN = os.environ.get("ALARM_API_TOKEN", "")
 
 # Must match the firmware (02_variables_presetup.h)
