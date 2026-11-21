@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alarm Clock</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #6b7385; --line: #dde1e8;
+    --accent: #2f6fde; --accent-text: #fff; --ok: #1f8a4c; --warn: #b5541a; --off: #c4c9d3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171d; --card: #1d2129; --text: #e6e9ef; --muted: #959cab; --line: #2f3542;
+            --accent: #5b8ff0; --ok: #4cc27f; --warn: #ef9255; --off: #434a58; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 960px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; flex: 1 1 auto; }
+  #status { color: var(--muted); font-size: 13px; }
+  #status .ok { color: var(--ok); } #status .warn { color: var(--warn); }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; display: grid; gap: 12px;
+         grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+           padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card.inactive { opacity: .62; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .num { font-weight: 600; color: var(--muted); min-width: 1.6em; }
+  .head input.name { flex: 1; font-weight: 600; border-color: transparent; background: transparent; }
+  .head input.name:hover, .head input.name:focus { border-color: var(--line); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .full { grid-column: 1 / -1; }
+  label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                  border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+  input[type=checkbox] { width: auto; }
+  .checks { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+  .checks label { display: flex; gap: 6px; align-items: center; }
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: var(--off); border-radius: 24px; transition: .15s; cursor: pointer; }
+  .switch span::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+                         background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::before { transform: translateX(18px); }
+  .hidden { display: none !important; }
+  details { margin-top: 10px; font-size: 14px; }
+  summary { cursor: pointer; color: var(--muted); }
+  details .grid { margin-top: 8px; }
+  .summary { font-size: 13px; color: var(--muted); margin: -4px 0 10px 2.6em; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Alarm Clock</h1>
+    <span id="status">Loading…</span>
+    <button id="revert" disabled>Discard</button>
+    <button id="save" class="primary" disabled>Save</button>
+  </div>
+</header>
+<main id="list"></main>
+<div id="toast"></div>
+
+<template id="tpl">
+  <div class="card">
+    <div class="head">
+      <span class="num"></span>
+      <input class="name" data-k="name" placeholder="Alarm name" maxlength="40">
+      <label class="switch" title="Active"><input type="checkbox" data-k="active"><span></span></label>
+    </div>
+    <div class="summary"></div>
+    <div class="grid">
+      <label class="f">Time<input type="time" step="1" data-k="time"></label>
+      <label class="f">Repeat
+        <select data-k="repeat">
+          <option value="daily">Every day</option>
+          <option value="weekdays">Weekdays (Mon–Fri)</option>
+          <option value="weekend">Weekend (Sat–Sun)</option>
+          <option value="weekday">One day of the week</option>
+          <option value="date">On a date</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label class="f r-weekday">Day of the week
+        <select data-k="weekDay">
+          <option value="0">(any)</option><option value="1">Sunday</option><option value="2">Monday</option>
+          <option value="3">Tuesday</option><option value="4">Wednesday</option><option value="5">Thursday</option>
+          <option value="6">Friday</option><option value="7">Saturday</option>
+        </select>
+      </label>
+      <label class="f r-date">Month
+        <select data-k="month">
+          <option value="0">Every month</option><option value="1">January</option><option value="2">February</option>
+          <option value="3">March</option><option value="4">April</option><option value="5">May</option>
+          <option value="6">June</option><option value="7">July</option><option value="8">August</option>
+          <option value="9">September</option><option value="10">October</option><option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </label>
+      <label class="f r-date">Day of month<input type="number" min="0" max="31" data-k="day" placeholder="0 = any"></label>
+      <div class="checks full r-custom">
+        <label><input type="checkbox" data-k="weekDays"> Weekdays</label>
+        <label><input type="checkbox" data-k="weekendDays"> Weekend days</label>
+      </div>
+      <label class="f full">Message <input data-k="message" maxlength="31" placeholder="Empty = show the time"></label>
+      <label class="f">Duration (seconds)<input type="number" min="0" max="32766" data-k="duration"></label>
+      <label class="f">Sound
+        <select data-k="buzzer">
+          <option value="0">Off</option>
+          <option value="1">1 beep</option><option value="2">2 beeps</option><option value="3">3 beeps</option>
+          <option value="4">4 beeps (alarm clock)</option><option value="5">5 beeps</option><option value="6">6 beeps</option>
+          <option value="7">7 beeps</option><option value="8">8 beeps</option><option value="9">9 beeps</option>
+          <option value="11">Big Ben</option><option value="12">Avicii</option>
+        </select>
+      </label>
+      <div class="checks full">
+        <label><input type="checkbox" data-k="fx"> Blink display</label>
+        <label><input type="checkbox" data-k="bright"> Bright LEDs</label>
+      </div>
+    </div>
+    <details>
+      <summary>Action &amp; recurring</summary>
+      <div class="grid">
+        <label class="f full">Action
+          <select data-k="actionType">
+            <option value="0">None</option>
+            <option value="1">Set GPIO pin high</option>
+            <option value="2">Set GPIO pin low</option>
+            <option value="3">Neopixel wake-up light</option>
+            <option value="4">Neopixel wake-up light, chain next alarm</option>
+            <option value="5">Neopixels on (palette colour)</option>
+            <option value="6">Neopixels off (backlight colour)</option>
+          </select>
+        </label>
+        <label class="f a-num"><span class="a-num-label">GPIO pin</span><input type="number" min="0" max="99" data-k="actionNum"></label>
+        <label class="f">Then repeat every
+          <input type="number" min="0" max="32766" data-k="recurringInterval" placeholder="0 = off">
+        </label>
+        <label class="f">Unit
+          <select data-k="recurringType">
+            <option value="0">(no repeat)</option><option value="1">seconds</option><option value="2">minutes</option>
+            <option value="3">hours</option><option value="4">days</option><option value="5">months</option>
+          </select>
+        </label>
+      </div>
+    </details>
+  </div>
+</template>
+
+<script>
+const $ = s => document.querySelector(s);
+const DAYS = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const INT_KEYS = ["weekDay", "month", "day", "duration", "buzzer", "actionType", "actionNum", "recurringType", "recurringInterval"];
+let saved = null;     // last config from the server
+let alarms = [];      // working copy
+let token = localStorage.getItem("alarmToken") || "";
+
+const pad = n => String(n).padStart(2, "0");
+const clone = o => JSON.parse(JSON.stringify(o));
+
+function repeatMode(a) {
+  const filters = [a.weekDays || a.weekendDays, a.weekDay > 0, a.month > 0 || a.day > 0].filter(Boolean).length;
+  if (filters > 1) return "custom";
+  if (a.weekDays && a.weekendDays) return "daily";
+  if (a.weekDays) return "weekdays";
+  if (a.weekendDays) return "weekend";
+  if (a.weekDay > 0) return "weekday";
+  if (a.month > 0 || a.day > 0) return "date";
+  return "daily";
+}
+
+function applyRepeat(a, mode) {
+  if (mode === "custom") return;
+  a.weekDays = mode === "weekdays";
+  a.weekendDays = mode === "weekend";
+  if (mode !== "weekday") a.weekDay = 0;
+  if (mode !== "date") { a.month = 0; a.day = 0; }
+  if (mode === "weekday" && !a.weekDay) a.weekDay = 2;
+}
+
+function describe(a) {
+  if (!a.active) return "Off";
+  let when = `${pad(a.hour)}:${pad(a.min)}${a.sec ? ":" + pad(a.sec) : ""}`;
+  const m = repeatMode(a);
+  if (m === "daily") when += " every day";
+  else if (m === "weekdays") when += " on weekdays";
+  else if (m === "weekend") when += " at the weekend";
+  else if (m === "weekday") when += " every " + DAYS[a.weekDay];
+  else if (m === "date") when += a.day ? ` on ${a.day} ${a.month ? MONTHS[a.month] : "of every month"}` : ` every day in ${MONTHS[a.month]}`;
+  else when += " (custom)";
+  if (a.recurringType && a.recurringInterval)
+    when += `, then every ${a.recurringInterval} ${["", "s", "min", "h", "days", "months"][a.recurringType]}`;
+  return when;
+}
+
+function render() {
+  const list = $("#list");
+  list.innerHTML = "";
+  alarms.forEach((a, i) => {
+    const card = $("#tpl").content.firstElementChild.cloneNode(true);
+    card.querySelector(".num").textContent = i + 1;
+    card.querySelectorAll("[data-k]").forEach(el => {
+      const k = el.dataset.k;
+      if (k === "time") el.value = `${pad(a.hour)}:${pad(a.min)}:${pad(a.sec)}`;
+      else if (k === "repeat") el.value = repeatMode(a);
+      else if (el.type === "checkbox") el.checked = k === "fx" ? a.fx === 1 : !!a[k];
+      else el.value = a[k] ?? "";
+      el.addEventListener("input", () => onEdit(i, card, el));
+      el.addEventListener("change", () => onEdit(i, card, el));
+    });
+    if (![...card.querySelector('[data-k=buzzer]').options].some(o => +o.value === a.buzzer)) {
+      card.querySelector('[data-k=buzzer]').add(new Option(`Sound ${a.buzzer}`, a.buzzer, true, true));
+    }
+    refreshCard(card, a);
+    list.appendChild(card);
+  });
+  updateDirty();
+}
+
+function refreshCard(card, a) {
+  const mode = card.querySelector("[data-k=repeat]").value;
+  card.classList.toggle("inactive", !a.active);
+  card.querySelector(".summary").textContent = describe(a);
+  card.querySelectorAll(".r-weekday").forEach(e => e.classList.toggle("hidden", !["weekday", "custom"].includes(mode)));
+  card.querySelectorAll(".r-date").forEach(e => e.classList.toggle("hidden", !["date", "custom"].includes(mode)));
+  card.querySelectorAll(".r-custom").forEach(e => e.classList.toggle("hidden", mode !== "custom"));
+  const showNum = [1, 2, 5].includes(a.actionType);
+  card.querySelector(".a-num").classList.toggle("hidden", !showNum);
+  card.querySelector(".a-num-label").textContent = a.actionType === 5 ? "Palette colour number" : "GPIO pin";
+  if (a.fx === 1 && a.message) card.querySelector(".summary").textContent += " · note: blink is ignored with a message";
+}
+
+function onEdit(i, card, el) {
+  const a = alarms[i], k = el.dataset.k;
+  if (k === "time") {
+    const [h = 0, m = 0, s = 0] = (el.value || "0:0:0").split(":").map(Number);
+    Object.assign(a, { hour: h, min: m, sec: s });
+  } else if (k === "repeat") {
+    applyRepeat(a, el.value);
+    card.querySelector("[data-k=weekDay]").value = a.weekDay;
+    card.querySelector("[data-k=month]").value = a.month;
+    card.querySelector("[data-k=day]").value = a.day;
+    card.querySelector("[data-k=weekDays]").checked = a.weekDays;
+    card.querySelector("[data-k=weekendDays]").checked = a.weekendDays;
+  } else if (k === "fx") a.fx = el.checked ? 1 : 0;
+  else if (el.type === "checkbox") a[k] = el.checked;
+  else if (INT_KEYS.includes(k)) a[k] = Math.max(0, parseInt(el.value, 10) || 0);
+  else a[k] = el.value;
+  if (k === "active" && a.active && a.duration === 0) {     // same defaults the old on-device menu used
+    a.duration = 10; card.querySelector("[data-k=duration]").value = 10;
+  }
+  refreshCard(card, a);
+  updateDirty();
+}
+
+function updateDirty() {
+  const dirty = saved && JSON.stringify(alarms) !== JSON.stringify(saved.alarms);
+  $("#save").disabled = !dirty;
+  $("#revert").disabled = !dirty;
+  document.title = (dirty ? "• " : "") + "Alarm Clock";
+}
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+async function load() {
+  const r = await fetch("api/alarms", { cache: "no-store" });
+  saved = await r.json();
+  alarms = clone(saved.alarms);
+  render();
+  pollStatus();
+}
+
+async function save() {
+  $("#save").disabled = true;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-Api-Token"] = token;
+  const r = await fetch("api/alarms", { method: "PUT", headers, body: JSON.stringify({ alarms }) });
+  if (r.status === 401) {
+    const t = prompt("This server needs an API token to save changes:");
+    if (t) { token = t; localStorage.setItem("alarmToken", t); return save(); }
+    updateDirty(); return;
+  }
+  const data = await r.json();
+  if (!r.ok) { toast("Not saved: " + (data.error || r.status)); updateDirty(); return; }
+  saved = data;
+  alarms = clone(saved.alarms);
+  render();
+  toast("Saved. The clock picks it up on its next sync.");
+  pollStatus();
+}
+
+function ago(sec) {
+  if (sec < 90) return Math.round(sec) + " s ago";
+  if (sec < 5400) return Math.round(sec / 60) + " min ago";
+  return Math.round(sec / 3600) + " h ago";
+}
+
+async function pollStatus() {
+  try {
+    const s = await (await fetch("api/status", { cache: "no-store" })).json();
+    let html;
+    if (!s.lastClockFetch) html = '<span class="warn">Clock has not synced since the server started</span>';
+    else {
+      const age = s.serverTime - s.lastClockFetch;
+      html = `<span class="${age < 300 ? "ok" : "warn"}">Clock synced ${ago(age)}</span> (${s.lastClockAddress})`;
+    }
+    $("#status").innerHTML = html + ` · config v${s.version}`;
+  } catch { $("#status").innerHTML = '<span class="warn">Server unreachable</span>'; }
+}
+
+$("#save").onclick = save;
+$("#revert").onclick = () => { alarms = clone(saved.alarms); render(); };
+window.addEventListener("beforeunload", e => { if (!$("#save").disabled) e.preventDefault(); });
+setInterval(pollStatus, 15000);
+load().catch(e => { $("#status").innerHTML = '<span class="warn">Could not load alarms: ' + e + "</span>"; });
+</script>
+</body>
+</html>
