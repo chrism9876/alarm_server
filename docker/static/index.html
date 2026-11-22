@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alarm Clock</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f6fde">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Alarms">
+<link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
   :root {
     --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #6b7385; --line: #dde1e8;
@@ -325,6 +333,7 @@ $("#save").onclick = save;
 $("#revert").onclick = () => { alarms = clone(saved.alarms); render(); };
 window.addEventListener("beforeunload", e => { if (!$("#save").disabled) e.preventDefault(); });
 setInterval(pollStatus, 15000);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 load().catch(e => { $("#status").innerHTML = '<span class="warn">Could not load alarms: ' + e + "</span>"; });
 </script>
 </body>

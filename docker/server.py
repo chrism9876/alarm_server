@@ -34,7 +34,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-DATA_FILE = Path(os.environ.get("ALARM_DATA_FILE", BASE_DIR / "conf/alarms.json"))
+DATA_FILE = Path(os.environ.get("ALARM_DATA_FILE", BASE_DIR / "alarms.json"))
 API_TOKEN = os.environ.get("ALARM_API_TOKEN", "")
 
 # Must match the firmware (02_variables_presetup.h)
@@ -61,6 +61,16 @@ FIELDS = {
     "fx":                (int, 0, 1, 1),       # 1 = blink
     "actionType":        (int, 0, 6, 0),
     "actionNum":         (int, 0, 99, 0),
+}
+
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".webmanifest": "application/manifest+json",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
 }
 
 _lock = threading.Lock()
@@ -156,6 +166,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if path.name == "sw.js":
+            self.send_header("Cache-Control", "no-cache")   # browsers must pick up a new service worker at once
         self.end_headers()
         self.wfile.write(body)
 
@@ -180,7 +192,15 @@ class Handler(BaseHTTPRequestHandler):
                     "tokenRequired": bool(API_TOKEN),
                 })
         else:
+            self._send_static(path)
+
+    def _send_static(self, path):
+        # any other file under static/ (manifest, service worker, icons); refuse paths outside it
+        target = (STATIC_DIR / path.lstrip("/")).resolve()
+        if STATIC_DIR not in target.parents or not target.is_file():
             self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        self._send_file(target, CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream"))
 
     def _get_alarms(self):
         with _lock:

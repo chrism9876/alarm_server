@@ -22,6 +22,19 @@ Options:
 
 Run it on an always-on machine with a fixed LAN address, such as a Pi, NAS or home server.
 
+## Install it as an app on Android
+
+The page has a web app manifest, an alarm clock icon and a service worker, so Chrome can install it as an app. Once installed it opens full screen, with no address bar, and has its own icon in the app drawer.
+
+Chrome only allows a full install from a **secure origin**: HTTPS, or `localhost`. A plain `http://192.168.x.x:8080` address only gets "Add to Home screen", which makes a shortcut that opens in a normal Chrome tab. To get the real app, do one of these:
+
+- **Put the server behind HTTPS** (recommended). Use a reverse proxy with a certificate your phone trusts, such as Caddy, Nginx Proxy Manager, Home Assistant's add-ons, or a Tailscale `https://<name>.ts.net` address. Proxy everything to `http://<server>:8080`.
+- **For a quick test**, open `chrome://flags/#unsafely-treat-insecure-origin-as-secure` on the phone. Enter `http://<server-ip>:8080`, set it to Enabled and restart Chrome.
+
+Then open the page, tap the **⋮ menu**, and choose **Install app** (or **Add to Home screen → Install**).
+
+The icon files are in `static/icons/`. `icon.svg` is the source for the regular icon and `icon-maskable.svg` is the full-bleed version Android crops to its own shapes. After editing either one, re-export the PNGs at the same sizes.
+
 ## Point the clock at it
 
 In `01_definitions_libraries.h`:
