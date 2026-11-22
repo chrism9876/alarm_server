@@ -57,6 +57,7 @@
   .switch input:checked + span { background: var(--accent); }
   .switch input:checked + span::before { transform: translateX(18px); }
   .hidden { display: none !important; }
+  body.offline header { background: color-mix(in srgb, var(--warn) 14%, var(--bg)); }
   details { margin-top: 10px; font-size: 14px; }
   summary { cursor: pointer; color: var(--muted); }
   details .grid { margin-top: 8px; }
@@ -283,11 +284,40 @@ function toast(msg) {
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3500);
 }
 
+let offline = false;   // true while the server (behind the proxy) is down
+
+function setOffline(on) {
+  offline = on;
+  document.body.classList.toggle("offline", on);
+  if (on) $("#status").innerHTML = '<span class="warn">Server offline</span>' +
+    (saved ? " · showing the last alarms this device saw, changes can't be saved now" : "");
+}
+
+// any 5xx means the reverse proxy is up but the alarm server is not
+const serverDown = r => r.status >= 500 || r.headers.get("X-Offline") === "1";
+
 async function load() {
-  const r = await fetch("api/alarms", { cache: "no-store" });
+  let r;
+  try { r = await fetch("api/alarms", { cache: "no-store" }); }
+  catch { r = null; }
+
+  if (r && r.ok && r.headers.get("X-Offline") === "1") {   // last good copy from the service worker
+    saved = await r.json();
+    alarms = clone(saved.alarms);
+    render();
+    setOffline(true);
+    return;
+  }
+  if (!r || !r.ok) {
+    setOffline(!r || serverDown(r));
+    if (!saved) $("#status").innerHTML = '<span class="warn">' +
+      (offline ? "Server offline and no saved copy on this device yet" : "Could not load alarms (" + r.status + ")") + "</span>";
+    return;
+  }
   saved = await r.json();
   alarms = clone(saved.alarms);
   render();
+  setOffline(false);
   pollStatus();
 }
 
@@ -295,13 +325,20 @@ async function save() {
   $("#save").disabled = true;
   const headers = { "Content-Type": "application/json" };
   if (token) headers["X-Api-Token"] = token;
-  const r = await fetch("api/alarms", { method: "PUT", headers, body: JSON.stringify({ alarms }) });
+  let r;
+  try { r = await fetch("api/alarms", { method: "PUT", headers, body: JSON.stringify({ alarms }) }); }
+  catch { r = null; }
+  if (!r || serverDown(r)) {
+    setOffline(true);
+    toast("Server offline - not saved. Your changes are still here, save again when it is back.");
+    updateDirty(); return;
+  }
   if (r.status === 401) {
     const t = prompt("This server needs an API token to save changes:");
     if (t) { token = t; localStorage.setItem("alarmToken", t); return save(); }
     updateDirty(); return;
   }
-  const data = await r.json();
+  const data = await r.json().catch(() => ({}));
   if (!r.ok) { toast("Not saved: " + (data.error || r.status)); updateDirty(); return; }
   saved = data;
   alarms = clone(saved.alarms);
@@ -318,7 +355,15 @@ function ago(sec) {
 
 async function pollStatus() {
   try {
-    const s = await (await fetch("api/status", { cache: "no-store" })).json();
+    const r = await fetch("api/status", { cache: "no-store" });
+    if (serverDown(r)) throw new Error("down");
+    const s = await r.json();
+    if (offline) {                         // server is back: reload, unless the user has unsaved edits
+      offline = false;
+      document.body.classList.remove("offline");
+      if ($("#save").disabled) { load(); return; }
+      toast("Server is back - you can save now.");
+    }
     let html;
     if (!s.lastClockFetch) html = '<span class="warn">Clock has not synced since the server started</span>';
     else {
@@ -326,7 +371,7 @@ async function pollStatus() {
       html = `<span class="${age < 300 ? "ok" : "warn"}">Clock synced ${ago(age)}</span> (${s.lastClockAddress})`;
     }
     $("#status").innerHTML = html + ` · config v${s.version}`;
-  } catch { $("#status").innerHTML = '<span class="warn">Server unreachable</span>'; }
+  } catch { setOffline(true); }
 }
 
 $("#save").onclick = save;
@@ -335,6 +380,7 @@ window.addEventListener("beforeunload", e => { if (!$("#save").disabled) e.preve
 setInterval(pollStatus, 15000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 load().catch(e => { $("#status").innerHTML = '<span class="warn">Could not load alarms: ' + e + "</span>"; });
+window.addEventListener("online", pollStatus);
 </script>
 </body>
 </html>
