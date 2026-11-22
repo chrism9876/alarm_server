@@ -1,6 +1,6 @@
 services:
   alarm_server:
-    image: cm98765432/alarm_server:v4
+    image: cm98765432/alarm_server:v5
     container_name: alarm_server
     ports:
       - '8080:8080'
