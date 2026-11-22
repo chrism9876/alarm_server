@@ -1,6 +1,7 @@
 # Docker
 
-when renning in docker mount the conf dir to persist alarms
+when running in docker mount the conf dir to persist alarms.
+The compose file mount a volume to this location
 
 Expose port 8080
 
