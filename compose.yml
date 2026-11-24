@@ -1,11 +1,12 @@
 services:
   alarm_server:
-    image: cm98765432/alarm_server:v5
+    image: cm98765432/alarm_server:v6
     container_name: alarm_server
     ports:
       - '8080:8080'
     volumes:
-      - alarm-data:/app/conf
+      - alarm-data:/data
+      - /home/c/secrets/firebase-key.json:/run/secrets/firebase-key.json:ro
     restart: always
     working_dir: /app
     healthcheck:
